@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shift Launcher</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script>
+        let apiUrl = "";
+        let token = "";
+
+        // Initialize the app and ensure `window.pywebview.api` is available
+        function initializeApp() {
+            if (window.pywebview && window.pywebview.api) {
+                console.log("Exposed API functions:", window.pywebview.api);  // Debugging: Log exposed functions
+                loadSettings();
+            } else {
+                console.log("Waiting for pywebview API...");  // Debugging: Log waiting state
+                setTimeout(initializeApp, 100);
+            }
+        }
+
+
+
+
+        // Load settings from the Python backend
+        async function loadSettings() {
+            try {
+                const settings = await window.pywebview.api.load_config();  // Ensure this matches the exposed function name
+                apiUrl = settings.api_url;
+                token = settings.token;
+                fetchCars();
+                fetchTracks();
+            } catch (error) {
+                console.error("Failed to load settings:", error);
+            }
+        }
+
+
+
+
+        // Fetch cars from the API
+        async function fetchCars() {
+            try {
+                const response = await fetch(`${apiUrl}/cars`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (response.status === 401) {
+                    alert("Session expired. Please log in again.");
+                    openSettings();
+                    return;
+                }
+
+                const data = await response.json();
+                const carSelect = document.getElementById('carSelect');
+                carSelect.innerHTML = data.results.map(car => `<option value="${car.id}">${car.name}</option>`).join('');
+            } catch (error) {
+                console.error("Failed to fetch cars:", error);
+            }
+        }
+
+        // Fetch tracks from the API
+        async function fetchTracks() {
+            try {
+                const response = await fetch(`${apiUrl}/tracks`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (response.status === 401) {
+                    alert("Session expired. Please log in again.");
+                    openSettings();
+                    return;
+                }
+
+                const data = await response.json();
+                const trackSelect = document.getElementById('trackSelect');
+                trackSelect.innerHTML = data.results.map(track => `<option value="${track.id}">${track.name}</option>`).join('');
+            } catch (error) {
+                console.error("Failed to fetch tracks:", error);
+            }
+        }
+
+        // Open the settings screen
+        function openSettings() {
+            document.getElementById("settingsScreen").style.display = "block";
+        }
+
+        // Close the settings screen
+        function closeSettings() {
+            document.getElementById("settingsScreen").style.display = "none";
+        }
+
+        // Listen for Alt + P to open settings
+        document.addEventListener("keydown", function(event) {
+            if (event.altKey && event.key === "p") {
+                openSettings();
+            }
+        });
+
+        // Save settings to the Python backend
+        async function saveSettings() {
+            try {
+                const newApiUrl = document.getElementById("apiUrl").value;
+                const newSteamId = document.getElementById("steamId").value;
+                await window.pywebview.api.save_config({ api_url: newApiUrl, steam_id: newSteamId });
+                closeSettings();
+                location.reload();
+            } catch (error) {
+                console.error("Failed to save settings:", error);
+            }
+        }
+
+        // Log in the user
+        async function loginUser() {
+            try {
+                const username = document.getElementById("username").value;
+                const password = document.getElementById("password").value;
+                await window.pywebview.api.submit_login(username, password);
+                alert("Login successful!");
+                closeSettings();
+                location.reload();
+            } catch (error) {
+                alert("Login failed. Please try again.");
+                console.error("Login error:", error);
+            }
+        }
+
+        // Start a race
+        async function startRace() {
+            try {
+                const selectedCar = document.getElementById("carSelect").value;
+                const selectedTrack = document.getElementById("trackSelect").value;
+                const selectedRace = document.getElementById("raceType").value;
+
+                const response = await fetch(`${apiUrl}/calendars/active/race.ini`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (response.status === 401) {
+                    alert("Session expired. Please log in again.");
+                    openSettings();
+                    return;
+                }
+
+                if (response.ok) {
+                    await window.pywebview.api.download_race_file("active");
+                    alert(`Starting race with ${selectedCar} on ${selectedTrack} (${selectedRace})`);
+                } else {
+                    alert("Failed to start race.");
+                }
+            } catch (error) {
+                console.error("Failed to start race:", error);
+            }
+        }
+
+        // Initialize the app when the page loads
+        initializeApp();
+    </script>
+</head>
+<body class="text-center">
+    <h1>Shift Launcher</h1>
+
+    <div class="container mt-5">
+        <label for="carSelect">Select Car:</label>
+        <select id="carSelect" class="form-control"></select>
+
+        <label for="trackSelect" class="mt-3">Select Track:</label>
+        <select id="trackSelect" class="form-control"></select>
+
+        <label for="raceType" class="mt-3">Select Race Type:</label>
+        <select id="raceType" class="form-control">
+            <option>Hotlaps</option>
+            <option>Practice</option>
+            <option>Quick 10-minute Race with 20 cars</option>
+        </select>
+
+        <button class="btn btn-primary mt-4" onclick="startRace()">Go</button>
+    </div>
+
+    <div id="settingsScreen" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); color: white; padding: 50px;">
+        <h2>Settings</h2>
+        <label for="apiUrl">API URL:</label>
+        <input type="text" id="apiUrl" class="form-control">
+
+        <label for="steamId" class="mt-3">Steam ID:</label>
+        <input type="text" id="steamId" class="form-control">
+
+        <h3 class="mt-4">Login</h3>
+        <label for="username">Username:</label>
+        <input type="text" id="username" class="form-control">
+       
+        <label for="password" class="mt-2">Password:</label>
+        <input type="password" id="password" class="form-control">
+
+        <button class="btn btn-success mt-4" onclick="loginUser()">Login</button>
+        <button class="btn btn-danger mt-4" onclick="closeSettings()">Close</button>
+    </div>
+</body>
+</html>
